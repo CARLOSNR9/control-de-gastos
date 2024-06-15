@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Control de Gastos</title>
+    <link rel="stylesheet" type="text/css" href="/static/styles.css">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>Registro de Transacciones</h1>
+            <nav>
+                <a href="/">Registro</a> | 
+                <a href="/categorias">Categorías</a>
+            </nav>
+        </div>
+    </header>
+    <div class="container">
+        <form id="transaccionForm">
+            Descripción: <input type="text" id="descripcion" required oninput="convertToUppercase(this)"><br>
+            Categoría: 
+            <select id="categoria" required>
+                <option value="">Selecciona una categoría</option>
+            </select><br>
+            Monto: <input type="number" id="monto" required><br>
+            Fecha: <input type="date" id="fecha" value="" required><br>
+            Tipo: 
+            <select id="tipo" required>
+                <option value="entrada">Entrada</option>
+                <option value="salida">Salida</option>
+            </select><br>
+            <button type="submit">Agregar Transacción</button>
+            <button type="button" id="nuevaTransaccion">Nueva Transacción</button>
+            <button type="button" id="actualizarTransaccion" style="display: none;">Actualizar Transacción</button>
+        </form>
+
+        <div id="mensaje"></div>
+
+        <div id="saldo">Saldo Actual: $0 COP</div>
+
+        <h2>Transacciones</h2>
+        <ul id="transaccionesList"></ul>
+    </div>
+
+    <script>
+        // Función para convertir a mayúsculas
+        function convertToUppercase(input) {
+            input.value = input.value.toUpperCase();
+        }
+
+        // Función para establecer la fecha actual por defecto
+        function setTodayDate() {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('fecha').value = today;
+        }
+
+        // Formatear números con puntos
+        function formatNumber(num) {
+            return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+        }
+
+        document.getElementById('transaccionForm').addEventListener('submit', function(event) {
+            event.preventDefault();
+            agregarTransaccion();
+        });
+
+        document.getElementById('nuevaTransaccion').addEventListener('click', function() {
+            document.getElementById('transaccionForm').reset();
+            setTodayDate();
+            document.getElementById('actualizarTransaccion').style.display = 'none';
+            document.querySelector('button[type="submit"]').style.display = 'inline-block';
+        });
+
+        document.getElementById('actualizarTransaccion').addEventListener('click', function() {
+            actualizarTransaccion();
+        });
+
+        function mostrarMensaje(mensaje) {
+            const mensajeDiv = document.getElementById('mensaje');
+            mensajeDiv.textContent = mensaje;
+            mensajeDiv.style.display = 'block';
+            setTimeout(() => {
+                mensajeDiv.style.display = 'none';
+            }, 3000);
+        }
+
+        function cargarTransacciones() {
+            fetch('/obtener_transacciones')
+                .then(response => response.json())
+                .then(transacciones => {
+                    let transaccionesList = document.getElementById('transaccionesList');
+                    let saldo = 0;
+                    transaccionesList.innerHTML = '';
+                    transacciones.sort((a, b) => new Date(b.fecha) - new Date(a.fecha)); // Ordenar de más nueva a más antigua
+                    transacciones.forEach(transaccion => {
+                        let li = document.createElement('li');
+                        li.className = transaccion.tipo;
+                        li.innerHTML = `
+                            ${transaccion.fecha} - ${transaccion.descripcion} (${transaccion.categoria}): $${formatNumber(transaccion.monto)} COP (${transaccion.tipo})
+                            <span class="delete" onclick="eliminarTransaccion(${transaccion.id})">&times;</span>
+                        `;
+                        li.ondblclick = () => editarTransaccion(transaccion.id, transaccion.descripcion, transaccion.categoria, transaccion.monto, transaccion.fecha, transaccion.tipo);
+                        transaccionesList.appendChild(li);
+                        if (transaccion.tipo === 'entrada') {
+                            saldo += parseFloat(transaccion.monto);
+                        } else {
+                            saldo -= parseFloat(transaccion.monto);
+                        }
+                    });
+                    document.getElementById('saldo').textContent = `Saldo Actual: $${formatNumber(saldo)} COP`;
+                });
+        }
+
+        function cargarCategorias() {
+            fetch('/obtener_categorias')
+                .then(response => response.json())
+                .then(categorias => {
+                    let categoriaSelect = document.getElementById('categoria');
+                    categoriaSelect.innerHTML = '<option value="">Selecciona una categoría</option>';
+                    categorias.sort((a, b) => a.nombre.localeCompare(b.nombre)); // Ordenar alfabéticamente
+                    categorias.forEach(categoria => {
+                        let option = document.createElement('option');
+                        option.value = categoria.nombre;
+                        option.textContent = categoria.nombre;
+                        categoriaSelect.appendChild(option);
+                    });
+                });
+        }
+
+        function agregarTransaccion() {
+            let descripcion = document.getElementById('descripcion').value;
+            let categoria = document.getElementById('categoria').value;
+            let monto = document.getElementById('monto').value;
+            let fecha = document.getElementById('fecha').value;
+            let tipo = document.getElementById('tipo').value;
+
+            fetch('/agregar_transaccion', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    descripcion: descripcion,
+                    categoria: categoria,
+                    monto: monto,
+                    fecha: fecha,
+                    tipo: tipo
+                })
+            }).then(response => response.json()).then(data => {
+                mostrarMensaje(data.mensaje);
+                cargarTransacciones();
+                document.getElementById('transaccionForm').reset();
+                setTodayDate();
+            });
+        }
+
+        let transaccionActualId;
+
+        function editarTransaccion(id, descripcion, categoria, monto, fecha, tipo) {
+            transaccionActualId = id;
+            document.getElementById('descripcion').value = descripcion;
+            document.getElementById('categoria').value = categoria;
+            document.getElementById('monto').value = monto;
+            document.getElementById('fecha').value = fecha;
+            document.getElementById('tipo').value = tipo;
+
+            document.getElementById('actualizarTransaccion').style.display = 'inline-block';
+            document.querySelector('button[type="submit"]').style.display = 'none';
+        }
+
+        function actualizarTransaccion() {
+            let descripcion = document.getElementById('descripcion').value;
+            let categoria = document.getElementById('categoria').value;
+            let monto = document.getElementById('monto').value;
+            let fecha = document.getElementById('fecha').value;
+            let tipo = document.getElementById('tipo').value;
+
+            fetch(`/editar_transaccion/${transaccionActualId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    descripcion: descripcion,
+                    categoria: categoria,
+                    monto: monto,
+                    fecha: fecha,
+                    tipo: tipo
+                })
+            }).then(response => response.json()).then(data => {
+                mostrarMensaje(data.mensaje);
+                cargarTransacciones();
+                document.getElementById('transaccionForm').reset();
+                setTodayDate();
+                document.getElementById('actualizarTransaccion').style.display = 'none';
+                document.querySelector('button[type="submit"]').style.display = 'inline-block';
+            });
+        }
+
+        function eliminarTransaccion(id) {
+            fetch(`/eliminar_transaccion/${id}`, {
+                method: 'DELETE'
+            }).then(response => response.json()).then(data => {
+                mostrarMensaje(data.mensaje);
+                cargarTransacciones();
+            });
+        }
+
+        setTodayDate();
+        cargarCategorias();
+        cargarTransacciones();
+    </script>
+</body>
+</html>

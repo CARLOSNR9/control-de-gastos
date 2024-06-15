@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Control de Gastos - Categorías</title>
+    <link rel="stylesheet" type="text/css" href="/static/styles.css">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>Categorías</h1>
+            <nav>
+                <a href="/">Registro</a> | 
+                <a href="/categorias">Categorías</a>
+            </nav>
+        </div>
+    </header>
+    <div class="container">
+        <form id="categoriaForm">
+            Nombre de la Categoría: <input type="text" id="nombreCategoria" required><br>
+            <button type="submit">Agregar Categoría</button>
+        </form>
+
+        <div id="mensaje"></div>
+
+        <h2>Categorías</h2>
+        <ul id="categoriasList"></ul>
+    </div>
+
+    <script>
+        document.getElementById('categoriaForm').addEventListener('submit', function(event) {
+            event.preventDefault();
+
+            let nombreCategoria = document.getElementById('nombreCategoria').value;
+
+            fetch('/agregar_categoria', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ nombre: nombreCategoria })
+            }).then(response => response.json()).then(data => {
+                mostrarMensaje(data.mensaje);
+                cargarCategorias();
+                document.getElementById('categoriaForm').reset();
+            });
+        });
+
+        function mostrarMensaje(mensaje) {
+            const mensajeDiv = document.getElementById('mensaje');
+            mensajeDiv.textContent = mensaje;
+            mensajeDiv.style.display = 'block';
+            setTimeout(() => {
+                mensajeDiv.style.display = 'none';
+            }, 3000);
+        }
+
+        function cargarCategorias() {
+            fetch('/obtener_categorias')
+                .then(response => response.json())
+                .then(categorias => {
+                    let categoriasList = document.getElementById('categoriasList');
+                    categoriasList.innerHTML = '';
+                    categorias.forEach(categoria => {
+                        let li = document.createElement('li');
+                        li.textContent = categoria.nombre;
+                        li.innerHTML += ` <span class="delete" onclick="eliminarCategoria(${categoria.id})">&times;</span>`;
+                        li.ondblclick = () => editarCategoria(categoria.id, categoria.nombre);
+                        categoriasList.appendChild(li);
+                    });
+                });
+        }
+
+        function eliminarCategoria(id) {
+            fetch(`/eliminar_categoria/${id}`, {
+                method: 'DELETE'
+            }).then(response => response.json()).then(data => {
+                mostrarMensaje(data.mensaje);
+                cargarCategorias();
+            });
+        }
+
+        function editarCategoria(id, nombre) {
+            document.getElementById('nombreCategoria').value = nombre;
+
+            document.getElementById('categoriaForm').addEventListener('submit', function(event) {
+                event.preventDefault();
+
+                let nuevoNombre = document.getElementById('nombreCategoria').value;
+
+                fetch(`/editar_categoria/${id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ nombre: nuevoNombre })
+                }).then(response => response.json()).then(data => {
+                    mostrarMensaje(data.mensaje);
+                    cargarCategorias();
+                });
+            }, { once: true });
+        }
+
+        cargarCategorias();
+    </script>
+</body>
+</html>

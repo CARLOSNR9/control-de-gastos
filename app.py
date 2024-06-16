@@ -21,6 +21,10 @@ def index():
 def categorias():
     return render_template('categorias.html')
 
+@app.route('/reportes')
+def reportes():
+    return render_template('reportes.html')
+
 @app.route('/agregar_transaccion', methods=['POST'])
 def agregar_transaccion():
     data = request.json
@@ -37,7 +41,11 @@ def agregar_transaccion():
 
 @app.route('/obtener_transacciones', methods=['GET'])
 def obtener_transacciones():
-    transacciones = session.query(Transaccion).order_by(Transaccion.fecha.desc()).all()
+    categoria = request.args.get('categoria')
+    if categoria:
+        transacciones = session.query(Transaccion).filter_by(categoria=categoria).order_by(Transaccion.fecha.desc()).all()
+    else:
+        transacciones = session.query(Transaccion).order_by(Transaccion.fecha.desc()).all()
     return jsonify([{
         'id': t.id,
         'descripcion': t.descripcion,
@@ -108,6 +116,74 @@ def editar_categoria(id):
         return jsonify({'mensaje': 'Categoría actualizada'})
     else:
         return jsonify({'mensaje': 'Categoría no encontrada'}), 404
+
+@app.route('/datos_reportes', methods=['GET'])
+def datos_reportes():
+    resumen_mensual = session.query(
+        Transaccion.fecha,
+        Transaccion.tipo,
+        Transaccion.monto
+    ).all()
+    
+    # Crear un diccionario para agrupar los datos por mes
+    resumen_por_mes = {}
+    for transaccion in resumen_mensual:
+        mes = transaccion.fecha.strftime('%B')
+        if mes not in resumen_por_mes:
+            resumen_por_mes[mes] = {'ingresos': 0, 'gastos': 0}
+        if transaccion.tipo == 'entrada':
+            resumen_por_mes[mes]['ingresos'] += transaccion.monto
+        else:
+            resumen_por_mes[mes]['gastos'] += transaccion.monto
+    
+    resumen_mensual_datos = [
+        {'mes': mes, 'ingresos': valores['ingresos'], 'gastos': valores['gastos']}
+        for mes, valores in resumen_por_mes.items()
+    ]
+
+    desglose_categoria = session.query(
+        Transaccion.categoria,
+        Transaccion.tipo,
+        Transaccion.monto
+    ).all()
+
+    # Crear un diccionario para agrupar los datos por categoría
+    desglose_por_categoria = {}
+    for transaccion in desglose_categoria:
+        if transaccion.tipo == 'salida':  # Solo considerar los gastos
+            if transaccion.categoria not in desglose_por_categoria:
+                desglose_por_categoria[transaccion.categoria] = 0
+            desglose_por_categoria[transaccion.categoria] += transaccion.monto
+    
+    desglose_categoria_datos = [
+        {'categoria': categoria, 'monto': monto}
+        for categoria, monto in desglose_por_categoria.items()
+    ]
+
+    # Obtener la fecha de la última transacción
+    ultima_transaccion = session.query(Transaccion).order_by(Transaccion.fecha.desc()).first()
+    fecha_ultima_transaccion = ultima_transaccion.fecha.strftime('%Y-%m-%d') if ultima_transaccion else ''
+
+    transacciones = session.query(Transaccion).all()
+    transacciones_datos = [
+        {
+            'fecha': transaccion.fecha.strftime('%Y-%m-%d'),
+            'descripcion': transaccion.descripcion,
+            'categoria': transaccion.categoria,
+            'monto': transaccion.monto,
+            'tipo': transaccion.tipo
+        }
+        for transaccion in transacciones
+    ]
+
+    datos = {
+        'resumenMensual': resumen_mensual_datos,
+        'desgloseCategoria': desglose_categoria_datos,
+        'transacciones': transacciones_datos,
+        'fechaUltimaTransaccion': fecha_ultima_transaccion
+    }
+
+    return jsonify(datos)
 
 if __name__ == '__main__':
     app.run(debug=True)

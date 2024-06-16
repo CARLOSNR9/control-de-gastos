@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Reportes de Gastos</title>
+    <link rel="stylesheet" type="text/css" href="/static/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>Reportes de Gastos</h1>
+            <nav>
+                <a href="/">Registro</a> | 
+                <a href="/categorias">Categorías</a> |
+                <a href="/reportes">Reportes</a>
+            </nav>
+        </div>
+    </header>
+    <div class="container">
+        <h2 id="resumenMensualTitulo">Resumen Mensual hasta ...</h2>
+        <div style="width: 60%; margin: auto;">
+            <canvas id="resumenMensual"></canvas>
+        </div>
+        
+        <h2>Desglose por Categoría</h2>
+        <div style="width: 60%; margin: auto;">
+            <canvas id="desgloseCategoria"></canvas>
+        </div>
+        
+        <h2>Filtrar por Categoría</h2>
+        <select id="filtroCategoria">
+            <option value="">Selecciona una categoría</option>
+        </select>
+        <button type="button" onclick="filtrarPorCategoria()">Filtrar</button>
+        <button type="button" onclick="verTodasLasTransacciones()">Ver Todas</button>
+        
+        <h2>Transacciones</h2>
+        <table id="transaccionesTable">
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>Descripción</th>
+                    <th>Categoría</th>
+                    <th>Monto</th>
+                    <th>Tipo</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Las transacciones se cargarán aquí dinámicamente -->
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        fetch('/datos_reportes')
+            .then(response => response.json())
+            .then(datos => {
+                // Actualizar el título de Resumen Mensual
+                document.getElementById('resumenMensualTitulo').textContent = `Resumen Mensual hasta ${datos.fechaUltimaTransaccion}`;
+
+                // Cargar categorías en el filtro
+                const filtroCategoria = document.getElementById('filtroCategoria');
+                filtroCategoria.innerHTML = '<option value="">Selecciona una categoría</option>';
+                datos.desgloseCategoria.forEach(categoria => {
+                    const option = document.createElement('option');
+                    option.value = categoria.categoria;
+                    option.textContent = categoria.categoria;
+                    filtroCategoria.appendChild(option);
+                });
+
+                // Resumen Mensual
+                const resumenMensualData = {
+                    labels: datos.resumenMensual.map(d => d.mes),
+                    datasets: [{
+                        label: 'Ingresos',
+                        data: datos.resumenMensual.map(d => d.ingresos),
+                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        borderWidth: 1
+                    }, {
+                        label: 'Gastos',
+                        data: datos.resumenMensual.map(d => d.gastos),
+                        backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                        borderColor: 'rgba(255, 99, 132, 1)',
+                        borderWidth: 1
+                    }]
+                };
+
+                // Crear el gráfico Resumen Mensual
+                const ctxResumenMensual = document.getElementById('resumenMensual').getContext('2d');
+                new Chart(ctxResumenMensual, {
+                    type: 'bar',
+                    data: resumenMensualData,
+                    options: {
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+
+                // Desglose por Categoría
+                const totalDesglose = datos.desgloseCategoria.reduce((acc, curr) => acc + curr.monto, 0);
+                const desgloseCategoriaData = {
+                    labels: datos.desgloseCategoria.map(d => d.categoria),
+                    datasets: [{
+                        data: datos.desgloseCategoria.map(d => d.monto),
+                        backgroundColor: [
+                            'rgba(255, 99, 132, 0.2)',
+                            'rgba(54, 162, 235, 0.2)',
+                            'rgba(255, 206, 86, 0.2)',
+                            'rgba(75, 192, 192, 0.2)'
+                        ],
+                        borderColor: [
+                            'rgba(255, 99, 132, 1)',
+                            'rgba(54, 162, 235, 1)',
+                            'rgba(255, 206, 86, 1)',
+                            'rgba(75, 192, 192, 1)'
+                        ],
+                        borderWidth: 1
+                    }]
+                };
+
+                const ctxDesgloseCategoria = document.getElementById('desgloseCategoria').getContext('2d');
+                new Chart(ctxDesgloseCategoria, {
+                    type: 'pie',
+                    data: desgloseCategoriaData,
+                    options: {
+                        plugins: {
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        const label = context.label || '';
+                                        const value = context.raw;
+                                        const percentage = ((value / totalDesglose) * 100).toFixed(2) + '%';
+                                        return `${label}: $${value.toLocaleString()} (${percentage})`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+
+                // Cargar transacciones en la tabla
+                cargarTransacciones(datos.transacciones);
+            });
+
+        function filtrarPorCategoria() {
+            const categoriaSeleccionada = document.getElementById('filtroCategoria').value;
+            if (categoriaSeleccionada === "") {
+                fetch('/datos_reportes')
+                    .then(response => response.json())
+                    .then(datos => {
+                        cargarTransacciones(datos.transacciones);
+                    });
+            } else {
+                fetch(`/obtener_transacciones?categoria=${categoriaSeleccionada}`)
+                    .then(response => response.json())
+                    .then(transacciones => {
+                        cargarTransacciones(transacciones);
+                    });
+            }
+        }
+
+        function verTodasLasTransacciones() {
+            fetch('/datos_reportes')
+                .then(response => response.json())
+                .then(datos => {
+                    cargarTransacciones(datos.transacciones);
+                });
+        }
+
+        function cargarTransacciones(transacciones) {
+            const transaccionesTableBody = document.getElementById('transaccionesTable').getElementsByTagName('tbody')[0];
+            transaccionesTableBody.innerHTML = '';
+            transacciones.forEach(transaccion => {
+                const row = transaccionesTableBody.insertRow();
+                row.insertCell(0).innerText = transaccion.fecha;
+                row.insertCell(1).innerText = transaccion.descripcion;
+                row.insertCell(2).innerText = transaccion.categoria;
+                row.insertCell(3).innerText = `$${transaccion.monto.toLocaleString()}`;
+                row.insertCell(4).innerText = transaccion.tipo;
+            });
+        }
+    </script>
+</body>
+</html>

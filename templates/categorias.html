@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Control de Gastos - Categorías</title>
+    <title>Categorías</title>
     <link rel="stylesheet" type="text/css" href="/static/styles.css">
 </head>
 <body>
@@ -10,7 +10,8 @@
             <h1>Categorías</h1>
             <nav>
                 <a href="/">Registro</a> | 
-                <a href="/categorias">Categorías</a>
+                <a href="/categorias">Categorías</a> |
+                <a href="/reportes">Reportes</a>
             </nav>
         </div>
     </header>
@@ -22,27 +23,14 @@
 
         <div id="mensaje"></div>
 
-        <h2>Categorías</h2>
+        <h2>Categorías Existentes</h2>
         <ul id="categoriasList"></ul>
     </div>
 
     <script>
         document.getElementById('categoriaForm').addEventListener('submit', function(event) {
             event.preventDefault();
-
-            let nombreCategoria = document.getElementById('nombreCategoria').value;
-
-            fetch('/agregar_categoria', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ nombre: nombreCategoria })
-            }).then(response => response.json()).then(data => {
-                mostrarMensaje(data.mensaje);
-                cargarCategorias();
-                document.getElementById('categoriaForm').reset();
-            });
+            agregarCategoria();
         });
 
         function mostrarMensaje(mensaje) {
@@ -60,6 +48,7 @@
                 .then(categorias => {
                     let categoriasList = document.getElementById('categoriasList');
                     categoriasList.innerHTML = '';
+                    categorias.sort((a, b) => a.nombre.localeCompare(b.nombre)); // Ordenar alfabéticamente
                     categorias.forEach(categoria => {
                         let li = document.createElement('li');
                         li.textContent = categoria.nombre;
@@ -70,6 +59,54 @@
                 });
         }
 
+        function agregarCategoria() {
+            let nombreCategoria = document.getElementById('nombreCategoria').value;
+
+            fetch('/agregar_categoria', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    nombre: nombreCategoria
+                })
+            }).then(response => response.json()).then(data => {
+                mostrarMensaje(data.mensaje);
+                cargarCategorias();
+                document.getElementById('categoriaForm').reset();
+            });
+        }
+
+        let categoriaActualId;
+
+        function editarCategoria(id, nombre) {
+            categoriaActualId = id;
+            document.getElementById('nombreCategoria').value = nombre;
+
+            document.querySelector('button[type="submit"]').style.display = 'none';
+            document.getElementById('actualizarCategoria').style.display = 'inline-block';
+        }
+
+        function actualizarCategoria() {
+            let nombreCategoria = document.getElementById('nombreCategoria').value;
+
+            fetch(`/editar_categoria/${categoriaActualId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    nombre: nombreCategoria
+                })
+            }).then(response => response.json()).then(data => {
+                mostrarMensaje(data.mensaje);
+                cargarCategorias();
+                document.getElementById('categoriaForm').reset();
+                document.querySelector('button[type="submit"]').style.display = 'inline-block';
+                document.getElementById('actualizarCategoria').style.display = 'none';
+            });
+        }
+
         function eliminarCategoria(id) {
             fetch(`/eliminar_categoria/${id}`, {
                 method: 'DELETE'
@@ -77,27 +114,6 @@
                 mostrarMensaje(data.mensaje);
                 cargarCategorias();
             });
-        }
-
-        function editarCategoria(id, nombre) {
-            document.getElementById('nombreCategoria').value = nombre;
-
-            document.getElementById('categoriaForm').addEventListener('submit', function(event) {
-                event.preventDefault();
-
-                let nuevoNombre = document.getElementById('nombreCategoria').value;
-
-                fetch(`/editar_categoria/${id}`, {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ nombre: nuevoNombre })
-                }).then(response => response.json()).then(data => {
-                    mostrarMensaje(data.mensaje);
-                    cargarCategorias();
-                });
-            }, { once: true });
         }
 
         cargarCategorias();

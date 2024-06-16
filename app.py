@@ -1,11 +1,31 @@
 from flask import Flask, request, jsonify, render_template
+from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
-from models import Transaccion, Categoria, Base
+import os
 
 app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///transacciones.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
+
+Base = declarative_base()
+
+class Transaccion(Base):
+    __tablename__ = 'transacciones'
+    id = Column(Integer, primary_key=True)
+    descripcion = Column(String(100))
+    categoria = Column(String(50))
+    monto = Column(Float)
+    fecha = Column(DateTime)
+    tipo = Column(String(10))
+
+class Categoria(Base):
+    __tablename__ = 'categorias'
+    id = Column(Integer, primary_key=True)
+    nombre = Column(String(50))
 
 # Crear una sesión
 engine = create_engine('sqlite:///transacciones.db')
@@ -15,7 +35,8 @@ session = Session()
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    transacciones = session.query(Transaccion).order_by(Transaccion.fecha.desc()).all()
+    return render_template('index.html', transacciones=transacciones)
 
 @app.route('/categorias')
 def categorias():

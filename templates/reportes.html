@@ -27,15 +27,20 @@
             <canvas id="desgloseCategoria"></canvas>
         </div>
         
-        <h2>Filtrar por Categoría</h2>
-        <select id="filtroCategoria">
-            <option value="">Selecciona una categoría</option>
-        </select>
-        <button type="button" onclick="filtrarPorCategoria()">Filtrar</button>
-        <button type="button" onclick="verTodasLasTransacciones()">Ver Todas</button>
-        
-        <h2>Transacciones</h2>
-        <table id="transaccionesTable">
+        <h2>Filtrar por Categoría y Tipo</h2>
+        <div class="filters">
+            <label for="filtroCategoria">Categoría:</label>
+            <select id="filtroCategoria" onchange="filtrarPorFiltros()">
+                <option value="">Todas</option>
+            </select>
+            <label for="filtroTipo">Tipo:</label>
+            <select id="filtroTipo" onchange="filtrarPorFiltros()">
+                <option value="">Todos</option>
+                <option value="entrada">Entrada</option>
+                <option value="salida">Salida</option>
+            </select>
+        </div>
+        <table id="transaccionesTable" class="styled-table">
             <thead>
                 <tr>
                     <th>Fecha</th>
@@ -49,24 +54,19 @@
                 <!-- Las transacciones se cargarán aquí dinámicamente -->
             </tbody>
         </table>
+        <div id="totalIngresos" style="text-align: right; font-weight: bold; margin-top: 10px;"></div>
+        <div id="totalGastos" style="text-align: right; font-weight: bold; margin-top: 10px;"></div>
+        <div id="totalFiltrado" style="text-align: right; font-weight: bold; margin-top: 10px;"></div>
     </div>
 
     <script>
+        let transaccionesGlobal = [];
+
         fetch('/datos_reportes')
             .then(response => response.json())
             .then(datos => {
                 // Actualizar el título de Resumen Mensual
                 document.getElementById('resumenMensualTitulo').textContent = `Resumen Mensual hasta ${datos.fechaUltimaTransaccion}`;
-
-                // Cargar categorías en el filtro
-                const filtroCategoria = document.getElementById('filtroCategoria');
-                filtroCategoria.innerHTML = '<option value="">Selecciona una categoría</option>';
-                datos.desgloseCategoria.forEach(categoria => {
-                    const option = document.createElement('option');
-                    option.value = categoria.categoria;
-                    option.textContent = categoria.categoria;
-                    filtroCategoria.appendChild(option);
-                });
 
                 // Resumen Mensual
                 const resumenMensualData = {
@@ -123,10 +123,17 @@
                 };
 
                 const ctxDesgloseCategoria = document.getElementById('desgloseCategoria').getContext('2d');
-                new Chart(ctxDesgloseCategoria, {
+                const desgloseCategoriaChart = new Chart(ctxDesgloseCategoria, {
                     type: 'pie',
                     data: desgloseCategoriaData,
                     options: {
+                        onClick: (event, elements) => {
+                            if (elements.length > 0) {
+                                const index = elements[0].index;
+                                const categoriaSeleccionada = desgloseCategoriaData.labels[index];
+                                filtrarPorCategoria(categoriaSeleccionada);
+                            }
+                        },
                         plugins: {
                             tooltip: {
                                 callbacks: {
@@ -142,33 +149,43 @@
                     }
                 });
 
+                // Guardar las transacciones globalmente para el filtrado
+                transaccionesGlobal = datos.transacciones;
+
                 // Cargar transacciones en la tabla
                 cargarTransacciones(datos.transacciones);
+                calcularTotales(datos.transacciones);
+
+                // Cargar las opciones de categorías en el filtro
+                const filtroCategoria = document.getElementById('filtroCategoria');
+                const categoriasUnicas = [...new Set(datos.transacciones.map(t => t.categoria))];
+                categoriasUnicas.forEach(categoria => {
+                    const option = document.createElement('option');
+                    option.value = categoria;
+                    option.textContent = categoria;
+                    filtroCategoria.appendChild(option);
+                });
             });
 
-        function filtrarPorCategoria() {
-            const categoriaSeleccionada = document.getElementById('filtroCategoria').value;
-            if (categoriaSeleccionada === "") {
-                fetch('/datos_reportes')
-                    .then(response => response.json())
-                    .then(datos => {
-                        cargarTransacciones(datos.transacciones);
-                    });
-            } else {
-                fetch(`/obtener_transacciones?categoria=${categoriaSeleccionada}`)
-                    .then(response => response.json())
-                    .then(transacciones => {
-                        cargarTransacciones(transacciones);
-                    });
-            }
+        function filtrarPorCategoria(categoria) {
+            const filtroCategoria = document.getElementById('filtroCategoria');
+            filtroCategoria.value = categoria;
+
+            filtrarPorFiltros();
         }
 
-        function verTodasLasTransacciones() {
-            fetch('/datos_reportes')
-                .then(response => response.json())
-                .then(datos => {
-                    cargarTransacciones(datos.transacciones);
-                });
+        function filtrarPorFiltros() {
+            const categoriaSeleccionada = document.getElementById('filtroCategoria').value;
+            const tipoSeleccionado = document.getElementById('filtroTipo').value;
+
+            const transaccionesFiltradas = transaccionesGlobal.filter(transaccion => {
+                return (categoriaSeleccionada === "" || transaccion.categoria === categoriaSeleccionada) &&
+                       (tipoSeleccionado === "" || transaccion.tipo === tipoSeleccionado);
+            });
+
+            cargarTransacciones(transaccionesFiltradas);
+            calcularTotales(transaccionesFiltradas);
+            calcularTotalFiltrado(transaccionesFiltradas);
         }
 
         function cargarTransacciones(transacciones) {
@@ -182,6 +199,32 @@
                 row.insertCell(3).innerText = `$${transaccion.monto.toLocaleString()}`;
                 row.insertCell(4).innerText = transaccion.tipo;
             });
+        }
+
+        function calcularTotales(transacciones) {
+            let totalIngresos = 0;
+            let totalGastos = 0;
+
+            transacciones.forEach(transaccion => {
+                if (transaccion.tipo === 'entrada') {
+                    totalIngresos += transaccion.monto;
+                } else if (transaccion.tipo === 'salida') {
+                    totalGastos += transaccion.monto;
+                }
+            });
+
+            document.getElementById('totalIngresos').innerText = `Total Ingresos: $${totalIngresos.toLocaleString()}`;
+            document.getElementById('totalGastos').innerText = `Total Gastos: $${totalGastos.toLocaleString()}`;
+        }
+
+        function calcularTotalFiltrado(transacciones) {
+            let totalFiltrado = 0;
+
+            transacciones.forEach(transaccion => {
+                totalFiltrado += transaccion.monto;
+            });
+
+            document.getElementById('totalFiltrado').innerText = `Total Filtrado: $${totalFiltrado.toLocaleString()}`;
         }
     </script>
 </body>
